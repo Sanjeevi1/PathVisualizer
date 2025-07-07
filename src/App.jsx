@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
 
 const ROWS = 20;
@@ -10,21 +10,24 @@ function App() {
   const [grid, setGrid] = useState([]);
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
   const [algorithm, setAlgorithm] = useState('dijkstra');
+  const [stats, setStats] = useState({ visited: 0, path: 0, time: 0 });
+  const [theme, setTheme] = useState('dark');
 
   useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
     setGrid(createGrid());
-  }, []);
+  }, [theme]);
 
   const createGrid = () => {
-    const initialGrid = [];
+    const g = [];
     for (let row = 0; row < ROWS; row++) {
-      const currentRow = [];
+      const current = [];
       for (let col = 0; col < COLS; col++) {
-        currentRow.push(createNode(row, col));
+        current.push(createNode(row, col));
       }
-      initialGrid.push(currentRow);
+      g.push(current);
     }
-    return initialGrid;
+    return g;
   };
 
   const createNode = (row, col) => ({
@@ -41,15 +44,6 @@ function App() {
     h: 0,
   });
 
-  const toggleWall = (grid, row, col) => {
-    const newGrid = grid.slice();
-    const node = newGrid[row][col];
-    if (node.isStart || node.isEnd) return newGrid;
-    const newNode = { ...node, isWall: !node.isWall };
-    newGrid[row][col] = newNode;
-    return newGrid;
-  };
-
   const handleMouseDown = (row, col) => {
     const newGrid = toggleWall(grid, row, col);
     setGrid(newGrid);
@@ -62,19 +56,17 @@ function App() {
     setGrid(newGrid);
   };
 
-  const handleMouseUp = () => {
-    setMouseIsPressed(false);
+  const handleMouseUp = () => setMouseIsPressed(false);
+
+  const toggleWall = (grid, row, col) => {
+    const newGrid = grid.slice();
+    const node = newGrid[row][col];
+    if (node.isStart || node.isEnd) return newGrid;
+    newGrid[row][col] = { ...node, isWall: !node.isWall };
+    return newGrid;
   };
 
-  const getAllNodes = (grid) => {
-    const nodes = [];
-    for (const row of grid) {
-      for (const node of row) {
-        nodes.push(node);
-      }
-    }
-    return nodes;
-  };
+  const getAllNodes = (grid) => grid.flat();
 
   const getUnvisitedNeighbors = (node, grid) => {
     const { row, col } = node;
@@ -86,43 +78,40 @@ function App() {
     return neighbors.filter(n => !n.isVisited && !n.isWall);
   };
 
-  const dijkstra = (grid, startNode, endNode) => {
-    const visitedNodes = [];
-    startNode.distance = 0;
+  const dijkstra = (grid, start, end) => {
+    const visited = [];
+    start.distance = 0;
     const unvisited = getAllNodes(grid);
 
     while (unvisited.length) {
       unvisited.sort((a, b) => a.distance - b.distance);
       const closest = unvisited.shift();
       if (closest.isWall) continue;
-      if (closest.distance === Infinity) return visitedNodes;
-
+      if (closest.distance === Infinity) return visited;
       closest.isVisited = true;
-      visitedNodes.push(closest);
-      if (closest === endNode) return visitedNodes;
+      visited.push(closest);
+      if (closest === end) return visited;
 
       const neighbors = getUnvisitedNeighbors(closest, grid);
       for (const neighbor of neighbors) {
-        const alt = closest.distance + 1;
-        if (alt < neighbor.distance) {
-          neighbor.distance = alt;
+        if (closest.distance + 1 < neighbor.distance) {
+          neighbor.distance = closest.distance + 1;
           neighbor.previousNode = closest;
         }
       }
     }
-
-    return visitedNodes;
+    return visited;
   };
 
-  const bfs = (grid, startNode, endNode) => {
-    const queue = [startNode];
-    const visitedNodes = [];
-    startNode.isVisited = true;
+  const bfs = (grid, start, end) => {
+    const queue = [start];
+    const visited = [];
+    start.isVisited = true;
 
     while (queue.length) {
       const node = queue.shift();
-      visitedNodes.push(node);
-      if (node === endNode) return visitedNodes;
+      visited.push(node);
+      if (node === end) return visited;
 
       const neighbors = getUnvisitedNeighbors(node, grid);
       for (const neighbor of neighbors) {
@@ -131,40 +120,36 @@ function App() {
         queue.push(neighbor);
       }
     }
-
-    return visitedNodes;
+    return visited;
   };
 
-  const dfs = (grid, startNode, endNode) => {
-    const stack = [startNode];
-    const visitedNodes = [];
+  const dfs = (grid, start, end) => {
+    const stack = [start];
+    const visited = [];
 
     while (stack.length) {
       const node = stack.pop();
       if (node.isVisited || node.isWall) continue;
       node.isVisited = true;
-      visitedNodes.push(node);
-      if (node === endNode) return visitedNodes;
+      visited.push(node);
+      if (node === end) return visited;
 
       const neighbors = getUnvisitedNeighbors(node, grid).reverse();
       for (const neighbor of neighbors) {
-        if (!neighbor.isVisited) {
-          neighbor.previousNode = node;
-          stack.push(neighbor);
-        }
+        neighbor.previousNode = node;
+        stack.push(neighbor);
       }
     }
-
-    return visitedNodes;
+    return visited;
   };
 
-  const aStar = (grid, startNode, endNode) => {
-    const openSet = [startNode];
-    startNode.g = 0;
-    startNode.h = heuristic(startNode, endNode);
-    startNode.f = startNode.h;
+  const aStar = (grid, start, end) => {
+    const openSet = [start];
+    start.g = 0;
+    start.h = heuristic(start, end);
+    start.f = start.h;
 
-    const visitedNodes = [];
+    const visited = [];
 
     while (openSet.length) {
       openSet.sort((a, b) => a.f - b.f);
@@ -172,26 +157,22 @@ function App() {
       if (current.isWall) continue;
 
       current.isVisited = true;
-      visitedNodes.push(current);
-
-      if (current === endNode) return visitedNodes;
+      visited.push(current);
+      if (current === end) return visited;
 
       const neighbors = getUnvisitedNeighbors(current, grid);
       for (const neighbor of neighbors) {
-        const tentativeG = current.g + 1;
-        if (tentativeG < neighbor.g) {
-          neighbor.g = tentativeG;
-          neighbor.h = heuristic(neighbor, endNode);
+        const tempG = current.g + 1;
+        if (tempG < neighbor.g) {
+          neighbor.g = tempG;
+          neighbor.h = heuristic(neighbor, end);
           neighbor.f = neighbor.g + neighbor.h;
           neighbor.previousNode = current;
-          if (!openSet.includes(neighbor)) {
-            openSet.push(neighbor);
-          }
+          if (!openSet.includes(neighbor)) openSet.push(neighbor);
         }
       }
     }
-
-    return visitedNodes;
+    return visited;
   };
 
   const heuristic = (a, b) => Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
@@ -207,92 +188,84 @@ function App() {
   };
 
   const animatePath = (path) => {
-    for (let i = 0; i < path.length; i++) {
+    path.forEach((node, i) => {
       setTimeout(() => {
-        const node = path[i];
         const el = document.getElementById(`node-${node.row}-${node.col}`);
-        if (el && !node.isStart && !node.isEnd)
-          el.className = 'node node-path';
+        if (el && !node.isStart && !node.isEnd) el.className = 'node node-path';
       }, 30 * i);
-    }
+    });
   };
 
-  const animate = (visitedNodes, path) => {
-    for (let i = 0; i <= visitedNodes.length; i++) {
-      if (i === visitedNodes.length) {
+  const animate = (visited, path, time) => {
+    visited.forEach((node, i) => {
+      setTimeout(() => {
+        const el = document.getElementById(`node-${node.row}-${node.col}`);
+        if (el && !node.isStart && !node.isEnd) el.className = 'node node-visited';
+      }, 10 * i);
+
+      if (i === visited.length - 1) {
         setTimeout(() => {
           animatePath(path);
-        }, 10 * i);
-        return;
+          setStats({ visited: visited.length, path: path.length, time });
+        }, 10 * i + 100);
       }
-      setTimeout(() => {
-        const node = visitedNodes[i];
-        const el = document.getElementById(`node-${node.row}-${node.col}`);
-        if (el && !node.isStart && !node.isEnd)
-          el.className = 'node node-visited';
-      }, 10 * i);
-    }
+    });
   };
 
   const visualize = () => {
-    const newGrid = grid.slice().map(row =>
-      row.map(node => ({
-        ...node,
+    const freshGrid = grid.map(row =>
+      row.map(n => ({
+        ...n,
         isVisited: false,
         distance: Infinity,
         previousNode: null,
         f: Infinity,
         g: Infinity,
-        h: 0,
+        h: 0
       }))
     );
-    setGrid(newGrid);
+    setGrid(freshGrid);
 
-    const startNode = newGrid[START_NODE.row][START_NODE.col];
-    const endNode = newGrid[END_NODE.row][END_NODE.col];
+    const startNode = freshGrid[START_NODE.row][START_NODE.col];
+    const endNode = freshGrid[END_NODE.row][END_NODE.col];
 
-    let visited;
+    const startTime = performance.now();
+    let visited = [];
     switch (algorithm) {
-      case 'dijkstra':
-        visited = dijkstra(newGrid, startNode, endNode);
-        break;
-      case 'bfs':
-        visited = bfs(newGrid, startNode, endNode);
-        break;
-      case 'dfs':
-        visited = dfs(newGrid, startNode, endNode);
-        break;
-      case 'astar':
-        visited = aStar(newGrid, startNode, endNode);
-        break;
-      default:
-        visited = [];
+      case 'dijkstra': visited = dijkstra(freshGrid, startNode, endNode); break;
+      case 'bfs': visited = bfs(freshGrid, startNode, endNode); break;
+      case 'dfs': visited = dfs(freshGrid, startNode, endNode); break;
+      case 'astar': visited = aStar(freshGrid, startNode, endNode); break;
+      default: break;
     }
     const path = getShortestPath(endNode);
-    animate(visited, path);
+    const endTime = performance.now();
+    animate(visited, path, (endTime - startTime).toFixed(2));
   };
 
   const clearGrid = () => {
-    const newGrid = grid.map((row) =>
-      row.map((node) => {
+    const freshGrid = grid.map(row =>
+      row.map(node => {
         const el = document.getElementById(`node-${node.row}-${node.col}`);
         if (el) {
           el.className = 'node';
           if (node.isStart) el.classList.add('node-start');
-          else if (node.isEnd) el.classList.add('node-end');
+          if (node.isEnd) el.classList.add('node-end');
         }
+        return createNode(node.row, node.col);
+      })
+    );
+    setGrid(freshGrid);
+    setStats({ visited: 0, path: 0, time: 0 });
+  };
 
-        return {
-          ...node,
-          isVisited: false,
-          isPath: false,
-          isWall: false,
-          distance: Infinity,
-          previousNode: null,
-          f: Infinity,
-          g: Infinity,
-          h: 0,
-        };
+  const generateMaze = () => {
+    const newGrid = grid.map(row =>
+      row.map(node => {
+        if (!node.isStart && !node.isEnd) {
+          return { ...node, isWall: Math.random() < 0.3 };
+        }
+        return node;
       })
     );
     setGrid(newGrid);
@@ -300,17 +273,28 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Pathfinding Visualizer</h1>
-      <div style={{ marginBottom: '10px' }}>
-        <select value={algorithm} onChange={(e) => setAlgorithm(e.target.value)}>
+      <h1>🧭 Pathfinding Visualizer</h1>
+
+      <div className="controls">
+        <select value={algorithm} onChange={e => setAlgorithm(e.target.value)}>
           <option value="dijkstra">Dijkstra</option>
-          <option value="bfs">BFS</option>
-          <option value="dfs">DFS</option>
+          <option value="bfs">Breadth-First Search (BFS)</option>
+          <option value="dfs">Depth-First Search (DFS)</option>
           <option value="astar">A*</option>
         </select>
+
         <button onClick={visualize}>Visualize</button>
-        <button onClick={clearGrid}>Clear</button>
+        <button onClick={generateMaze}>Generate Maze</button>
+        <button onClick={clearGrid}>Clear Grid</button>
+
       </div>
+
+      <div className="stats">
+        <span>Visited: {stats.visited}</span>
+        <span> | Path: {stats.path}</span>
+        <span> | Time: {stats.time} ms</span>
+      </div>
+
       <div className="grid">
         {grid.map((row, rowIdx) => (
           <div key={rowIdx} className="grid-row">
